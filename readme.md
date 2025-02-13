@@ -1,0 +1,1 @@
+Sample realtime chat app using ASP.NET Core, SignalR and Svelte 5
