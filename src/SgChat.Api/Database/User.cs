@@ -1,10 +1,13 @@
+using SgChat.Api.Infra.Models;
+
 namespace SgChat.Api.Database;
 
 public sealed class User
 {
-	public Guid Id { get; private set; }
+	public UserId Id { get; private set; }
 	public string Username { get; set; } = null!;
 
+	public ICollection<Room> Rooms { get; private set; } = null!;
 	public ICollection<Message> Messages { get; private set; } = null!;
 
 	private User() { }
@@ -14,8 +17,9 @@ public sealed class User
 		ArgumentNullException.ThrowIfNull(username);
 		return new User
 		{
-			Id = Guid.Empty,
 			Username = username,
+			Rooms = [],
+			Messages = []
 		};
 	}
 }
