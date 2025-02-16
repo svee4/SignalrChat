@@ -1,12 +1,8 @@
 <script lang="ts">
-	import { goto } from "$app/navigation";
-	import { CurrentUser } from "$lib/auth";
+	import { timeout, TimeoutError } from "$lib/helpers";
+    import { TimeoutError as SgTimeoutError } from "@microsoft/signalr";
     import { ChatHubClient, Messages, ConnectedUsers } from "$lib/signalr/chatHub";
 	import { onMount } from "svelte";
-
-    if ($CurrentUser === null) {
-        goto("/auth/login");
-    }
 
     const client = new ChatHubClient();
     let connected = $state(false);
@@ -19,19 +15,34 @@
         connected = true;
     });
 
+    const onBeforeUnload = () => {
+        client.disconnect()
+        return false;
+    }
+
     const sendMessage = async () => {
         if (sending) {
             return;
         }
 
-        
-        // sending = true;
-        await client.sendMessage(message);
+        sending = true;
+        try {
+            await timeout(client.sendMessage(message), 5000);
+        } catch (e) {
+            // TODO: proper errorssss to user
+            if (e instanceof TimeoutError) {
+                alert("Server timed out");
+                sending = false;
+                return;
+            }
+        }
 
         message = "";
         sending = false;
     }
 </script>
+
+<svelte:window onbeforeunload={onBeforeUnload}></svelte:window>
 
 <main>
     {#if !connected}
@@ -54,7 +65,7 @@
         {#each $Messages as message (message.id)}
         <li id={message.id}>
             <span>{message.user.username}: </span>
-            <span>{message.message}</span>
+            <span>{message.content}</span>
         </li>
         {/each}    
     </ul>

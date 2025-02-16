@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 namespace SgChat.Api.Infra;
 
+// abstract so it can be used as the generic for ILogger in Program.cs
 public abstract class Startup
 {
 	public static void RegisterEndpoints(WebApplication app)

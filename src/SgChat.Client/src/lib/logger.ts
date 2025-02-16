@@ -1,3 +1,5 @@
+import { isNullOrUndefined } from "./helpers";
+
 export class Logger {
 
     readonly prefix?: string;
@@ -6,21 +8,55 @@ export class Logger {
         this.prefix = prefix;
     }
 
-    #format(args: any[]) {
-        return this.prefix ? [`[${this.prefix}]`, ...args] : args;
+    #format(logLevel: LogLevel, args: any[]) {
+        if (isNullOrUndefined(this.prefix)) {
+            return args;
+        }
+        
+        let color: string;
+        switch (logLevel) {
+            case LogLevel.Debug: color = "black"; break;
+            case LogLevel.Info: color = "darkblue"; break;
+            case LogLevel.Warn: color = "darkyellow"; break;
+            case LogLevel.Error: color = "darkred"; break;
+            default: throw new Error(`Unknown LogLevel ${logLevel}`);
+        }
+
+        return [`%c[${this.prefix}]`, `color: ${color}; background-color: #fff;`, ...args];
+    }
+
+    log(logLevel: LogLevel, ...args: any[]) {
+        switch (logLevel) {
+            case LogLevel.Debug: this.logDebug(...args); break;
+            case LogLevel.Info: this.logInfo(...args); break;
+            case LogLevel.Warn: this.logWarn(...args); break;
+            case LogLevel.Error: this.logError(...args); break;
+            default: throw new Error(`Unknown LogLevel ${logLevel}`);
+        }
     }
 
     logDebug(...args: any[]) {
-        console.debug(...this.#format(args));
+        console.debug(...this.#format(LogLevel.Debug, args));
     }
 
     logInfo(...args: any[]) {
-        console.log(...this.#format(args));
+        console.log(...this.#format(LogLevel.Info, args));
+    }
+
+    logWarn(...args: any[]) {
+        console.warn(...this.#format(LogLevel.Warn, args));
     }
 
     logError(...args: any[]) {
-        console.error(...this.#format(args));
+        console.error(...this.#format(LogLevel.Error, args));
     }
 }
+
+export enum LogLevel {
+    Debug = 1,
+    Info,
+    Warn,
+    Error,
+};
 
 export default (prefix: string) => new Logger(prefix);

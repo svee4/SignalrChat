@@ -2,7 +2,7 @@
 export type Message = {
     readonly id: string;
     readonly user: User;
-    readonly message: string;
+    readonly content: string;
 }
 
 export type User = {
