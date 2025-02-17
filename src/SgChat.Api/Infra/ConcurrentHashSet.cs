@@ -31,6 +31,7 @@ public sealed class ConcurrentHashSet<T> : IEnumerable<T>
 		}
 	}
 
+	// thread safety: Keys is a thread safely implemented non-dynamic collection
 	public HashSet<T> Snapshot() => [.. _dictionary.Keys];
 
 	public int Count => _dictionary.Count;

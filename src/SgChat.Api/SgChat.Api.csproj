@@ -15,4 +15,8 @@
 		<PackageReference Include="Vogen" Version="7.0.0" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Chat\" />
+	</ItemGroup>
+
 </Project>

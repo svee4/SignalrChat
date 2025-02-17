@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
     import { login } from "$lib/auth";
+	import { Hub } from "$lib/signalr/chatHub";
     
     let username = $state("");
     let inProgress = $state(false);
@@ -10,7 +11,8 @@
         const success = await login(username);
 
         if (success) {
-            await goto("/chat");
+            await Hub.connect();
+            await goto("/rooms");
         }
 
         inProgress = false;

@@ -18,6 +18,7 @@ public sealed class Message
 
 		return new Message
 		{
+			Id = MessageId.From(Guid.CreateVersion7()),
 			Content = content,
 			User = user!,
 			Room = room!

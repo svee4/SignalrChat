@@ -1,4 +1,4 @@
-import { isNullOrUndefined } from "./helpers";
+import { isNullish } from "./helpers";
 
 export class Logger {
 
@@ -9,7 +9,7 @@ export class Logger {
     }
 
     #format(logLevel: LogLevel, args: any[]) {
-        if (isNullOrUndefined(this.prefix)) {
+        if (isNullish(this.prefix)) {
             return args;
         }
         

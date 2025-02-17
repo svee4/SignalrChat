@@ -17,6 +17,7 @@ public sealed class User
 		ArgumentNullException.ThrowIfNull(username);
 		return new User
 		{
+			Id = UserId.From(Guid.CreateVersion7()),
 			Username = username,
 			Rooms = [],
 			Messages = []

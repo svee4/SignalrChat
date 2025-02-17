@@ -18,6 +18,7 @@ public sealed class Room
 
 		return new Room
 		{
+			Id = RoomId.From(Guid.CreateVersion7()),
 			Name = name,
 			Users = [],
 			Messages = []

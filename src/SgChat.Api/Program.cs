@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using SgChat.Api.Chat;
 using SgChat.Api.Database;
+using SgChat.Api.Features.Chat;
 using SgChat.Api.Infra;
 
 var builder = WebApplication.CreateBuilder(args);

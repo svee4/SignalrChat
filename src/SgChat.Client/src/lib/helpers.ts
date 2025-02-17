@@ -9,7 +9,19 @@ export const timeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> =
     });
 }
 
-export const isNullOrUndefined = <T>(v?: T) => v === null || v === undefined;
+export const assert = (condition: boolean, message: string) => {
+    if (!condition) {
+        throw new Error(`Assertion failed: ${message}`);
+    }
+}
+
+export const isNullish = <T>(v?: T): boolean => v === null || v === undefined;
+
+export const assertNotNullish = <T>(v?: T, message?: string): NonNullable<T> => {
+    assert(v !== null, message ?? "v !== null");
+    assert(v !== undefined, message ?? "v !== undefined");
+    return v!;
+}
 
 export class TimeoutError extends Error {
     constructor()

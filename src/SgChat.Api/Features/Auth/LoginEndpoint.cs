@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SgChat.Api.Database;
 using SgChat.Api.Infra;
+using SgChat.Api.Infra.Models;
 using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -18,7 +19,7 @@ public sealed class LoginEndpoint : IEndpointHandler
 	}
 
 	public sealed record Request(string Username);
-	public sealed record Response(string Token, Guid UserId, string Username);
+	public sealed record Response(string Token, UserId UserId, string Username);
 
 	public async Task<Results<Ok<Response>, BadRequest>> Handler(Request model, SgChatDbContext dbContext)
 	{
@@ -29,7 +30,7 @@ public sealed class LoginEndpoint : IEndpointHandler
 		{
 			user = User.Create(username);
 			_ = dbContext.Users.Add(user);
-			_ = await dbContext.SaveChangesAsync();
+			await dbContext.SaveChangesAsync();
 		}
 
 		var claims = (IEnumerable<Claim>)[

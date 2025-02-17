@@ -1,22 +1,16 @@
 <script lang="ts">
 	import { timeout, TimeoutError } from "$lib/helpers";
-    import { TimeoutError as SgTimeoutError } from "@microsoft/signalr";
-    import { ChatHubClient, Messages, ConnectedUsers } from "$lib/signalr/chatHub";
-	import { onMount } from "svelte";
+    import { Hub, CurrentRoomConnectedUsers, CurrentRoomMessages } from "$lib/signalr/chatHub";
+	import type { PageData, PageLoad, PageProps } from "./$types";
 
-    const client = new ChatHubClient();
-    let connected = $state(false);
+    const { data }: PageProps = $props();
+    const roomId = data.roomId;
 
     let message = $state("");
     let sending = $state(false);
 
-    onMount(async () => {
-        await client.connect();
-        connected = true;
-    });
-
     const onBeforeUnload = () => {
-        client.disconnect()
+        Hub.disconnect();
         return false;
     }
 
@@ -27,7 +21,7 @@
 
         sending = true;
         try {
-            await timeout(client.sendMessage(message), 5000);
+            await timeout(Hub.sendMessage(message), 5000);
         } catch (e) {
             // TODO: proper errorssss to user
             if (e instanceof TimeoutError) {
@@ -45,15 +39,11 @@
 <svelte:window onbeforeunload={onBeforeUnload}></svelte:window>
 
 <main>
-    {#if !connected}
-    
-    <p>Connecting...</p>
-    
-    {:else}
+    <a href="/rooms">Close</a>
 
     <div>
         <span>Connected users: </span>
-        {#each $ConnectedUsers as user, i (user.id)}
+        {#each $CurrentRoomConnectedUsers! as user, i (user.id)}
 
         {#if i > 0},{/if}
         <span>{user.username}</span>
@@ -62,7 +52,7 @@
     </div>
     
     <ul>
-        {#each $Messages as message (message.id)}
+        {#each $CurrentRoomMessages! as message (message.id)}
         <li id={message.id}>
             <span>{message.user.username}: </span>
             <span>{message.content}</span>
@@ -74,6 +64,4 @@
         <input type="text" disabled={sending} bind:value={message} />
         <button onclick={sendMessage} disabled={sending}>Send</button>
     </div>
-    
-    {/if}
 </main>

@@ -12,7 +12,7 @@ using SgChat.Api.Database;
 namespace SgChat.Api.Migrations
 {
     [DbContext(typeof(SgChatDbContext))]
-    [Migration("20250216142830_Initial migration")]
+    [Migration("20250217111925_Initial migration")]
     partial class Initialmigration
     {
         /// <inheritdoc />
@@ -25,30 +25,62 @@ namespace SgChat.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("RoomUser", b =>
+                {
+                    b.Property<Guid>("RoomsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UsersId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RoomsId", "UsersId");
+
+                    b.HasIndex("UsersId");
+
+                    b.ToTable("RoomUser");
+                });
+
             modelBuilder.Entity("SgChat.Api.Database.Message", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<Guid>("RoomId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RoomId");
 
                     b.HasIndex("UserId");
 
                     b.ToTable("Messages");
                 });
 
+            modelBuilder.Entity("SgChat.Api.Database.Room", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Rooms");
+                });
+
             modelBuilder.Entity("SgChat.Api.Database.User", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<string>("Username")
@@ -60,15 +92,43 @@ namespace SgChat.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("RoomUser", b =>
+                {
+                    b.HasOne("SgChat.Api.Database.Room", null)
+                        .WithMany()
+                        .HasForeignKey("RoomsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SgChat.Api.Database.User", null)
+                        .WithMany()
+                        .HasForeignKey("UsersId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SgChat.Api.Database.Message", b =>
                 {
+                    b.HasOne("SgChat.Api.Database.Room", "Room")
+                        .WithMany("Messages")
+                        .HasForeignKey("RoomId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("SgChat.Api.Database.User", "User")
                         .WithMany("Messages")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("Room");
+
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SgChat.Api.Database.Room", b =>
+                {
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("SgChat.Api.Database.User", b =>
