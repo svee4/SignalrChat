@@ -4,41 +4,48 @@ import type { Message, Room, User } from "$lib/signalr/types";
 import { AccessToken } from "$lib/auth";
 import { ApiRoute } from "$lib/constants";
 import createLogger, { Logger } from "$lib/logger";
-import { assert, assertNotNullish, TimeoutError } from "$lib/helpers";
+import { assert, assertNotNullish, TimeoutError, wrapHubError } from "$lib/helpers";
 import { type ChatHubMessage, type ChatHubRoom, type IChatHubClient, type IChatHubServer, type OpenRoomResponse, type RoomId, type UserId } from "./interop";
 
-
+const connectedStore = writable<boolean>(false);
 const roomsStore = writable<(Room & { joined: boolean })[]>([]);
 const joinedRoomsStore = derived(roomsStore, arr => arr.filter(room => room.joined));
 const availableRoomsStore = derived(roomsStore, arr => arr.filter(room => !room.joined));
+
+const currentRoomStore = writable<{ name: string } | null>(null);
 const currentRoomUsersStore = writable<User[] | null>(null);
 const currentRoomConnectedUsersStore = writable<User[] | null>(null);
 const currentRoomMessagesStore = writable<Message[] | null>(null);
 
-// yes you have to assign these to a variable in order ot export them under a different name
+// yes you have to assign these to a variable in order to export them under a different name
+// its ugly but it works
+const _readonly_connectedStore = readonly(connectedStore);
 const _readonly_roomsStore = readonly(roomsStore);
 const _readonly_joinedRoomsStore = readonly(joinedRoomsStore);
 const _readonly_availableRoomsStore = readonly(availableRoomsStore);
+
+const _readonly_currentRoom = readonly(currentRoomStore);
 const _readonly_currentRoomUsersStore = readonly(currentRoomUsersStore);
 const _readonly_currentRoomConnectedUsersStore = readonly(currentRoomConnectedUsersStore);
 const _readonly_currentRoomMessagesStore = readonly(currentRoomMessagesStore);
 
 export {
+    _readonly_connectedStore as                 Connected,
     _readonly_roomsStore as                     Rooms,
     _readonly_joinedRoomsStore as               JoinedRooms,
     _readonly_availableRoomsStore as            AvailableRooms,
+
+    _readonly_currentRoom as                    CurrentRoom,
     _readonly_currentRoomUsersStore as          CurrentRoomUsers,
     _readonly_currentRoomConnectedUsersStore as CurrentRoomConnectedUsers,
     _readonly_currentRoomMessagesStore as       CurrentRoomMessages
 };
 
 const getUserById = (id: string): User => {
-    const roomUsers = get(currentRoomUsersStore);
-    if (roomUsers === null) {
-        throw new Error("Not connected");
-    }
+    assert(get(currentRoomStore) !== null, "Not in a room");
 
-    const user = roomUsers.find(user => user.id == id);
+    const roomUsers = assertNotNullish(get(currentRoomUsersStore), "currentRoomUsersStore should not be null");
+    const user = roomUsers!.find(user => user.id == id);
     
     if (user === undefined) {
         throw new Error("No such user");
@@ -48,8 +55,7 @@ const getUserById = (id: string): User => {
 }
 
 const getRoomById = (id: RoomId): Room => {
-    const rooms = get(joinedRoomsStore);
-
+    const rooms = get(roomsStore);
     const room = rooms.find(room => room.id == id);
     
     if (room === undefined) {
@@ -59,17 +65,14 @@ const getRoomById = (id: RoomId): Room => {
     return room;
 }
 
-const createWrapTimeoutErrorHelper = (logger: Logger) => {
-    return async <T>(promise: Promise<T>): Promise<T> => {
-        try {
-            return await promise;
-        } catch (e) {
-            logger.logError(e);
-            if (e instanceof Sg.TimeoutError) {
-                throw new TimeoutError("SignalR request timed out", { cause: e });
-            } else {
-                throw e;
-            }
+const wrapTimeoutError = async <T>(promise: Promise<T>): Promise<T> => {
+    try {
+        return await promise;
+    } catch (e) {
+        if (e instanceof Sg.TimeoutError) {
+            throw new TimeoutError("SignalR request timed out", { cause: e });
+        } else {
+            throw e;
         }
     }
 }
@@ -78,21 +81,14 @@ class HubManager {
     client: ChatHubClient;
     server: ChatHubServer;
     
-    connection: Sg.HubConnection | undefined;
-    openRoomId: RoomId | undefined;
+    connection: Sg.HubConnection;
+    roomId: RoomId | undefined;
 
-    #logger = createLogger("Container");
-    #wrapTimeout = createWrapTimeoutErrorHelper(this.#logger);
+    #logger = createLogger("HubManager");
 
     constructor() {
         this.client = new ChatHubClient(this);
         this.server = new ChatHubServer(this);
-    }
-    
-    async connect() {
-        if (this.connection !== undefined) {
-            throw new Error("connection already exists");
-        }
 
         const con = new Sg.HubConnectionBuilder()
             .withUrl(ApiRoute + "/hub/chat", {
@@ -105,32 +101,45 @@ class HubManager {
         
         this.client.registerHandlers(con);
 
-        this.connection = con;
+        con.onclose(async err => { 
+            this.#logger.logDebug("onclose", err); 
+            connectedStore.set(false);
+            await this.connect();
+        });
+        
+        con.onreconnecting(() => connectedStore.set(false));
+        con.onreconnected(() => connectedStore.set(true));
 
-        this.#logger.logInfo("Starting connection", con);
-        await this.#wrapTimeout(con.start());
+        this.connection = con;
+    }
+    
+    async connect() {
+        assert(this.connection.state === Sg.HubConnectionState.Disconnected, "Connection state must be 'Disconnected'");
+
+        this.#logger.logInfo("Starting connection", this.connection);
+        await wrapTimeoutError(this.connection.start());
+        connectedStore.set(true); // i dont see an event on Sg.Connection for this sadly
     }
 
     async disconnect() {
-        if (this.connection === undefined) {
-            return;
-        }
+        assert(this.connection.state === Sg.HubConnectionState.Connected, "Connection state must be 'Connected'");
 
         this.#logger.logInfo("Stopping connection");
-        await this.#wrapTimeout(this.connection.stop());
-        this.connection = undefined;
+        await wrapTimeoutError(this.connection.stop());
+        // onclose event listener handles setting connectionStore
     }
 
-    getConnection(): Sg.HubConnection {
-        return assertNotNullish(this.connection, "Client not connected");
+    getConnectedConnection(): Sg.HubConnection {
+        assert(this.connection.state === Sg.HubConnectionState.Connected, "Connection not connected");
+        return this.connection;
     }
 
-    getOpenRoomId(): RoomId {
-        return assertNotNullish(this.openRoomId, "No room opened");
+    getRoomId(): RoomId {
+        return assertNotNullish(this.roomId, "No room opened");
     }
 
     ensureRoomOpen() {
-        const discard = this.getOpenRoomId();
+        const discard = this.getRoomId();
     }
 }
 
@@ -165,13 +174,13 @@ class ChatHubClient implements IChatHubClient {
     }
 
     async messageReceived(message: ChatHubMessage) {
-        this.#manager.ensureRoomOpen();
         this.#logger.logDebug("messageReceived", message);
+        this.#manager.ensureRoomOpen();
 
         const { id, userId, roomId, content } = message;
         
         // TODO: notifications for messages in rooms that are joined but not currently opened
-        if (roomId !== this.#manager.openRoomId) {
+        if (roomId !== this.#manager.roomId) {
             return;
         }
 
@@ -185,23 +194,31 @@ class ChatHubClient implements IChatHubClient {
     }
 
     async userJoinedRoom(userId: UserId, roomId: RoomId, username: string) {
-        this.#logger.logDebug("userJoined", userId, roomId, username);
-        // no op - this app doesnt track room users, only connected users when we are also connected
+        this.#logger.logDebug("userJoinedRoom", userId, roomId, username);
+        // no op - this app doesnt track users of closed rooms
+        // we only track user activity in the room that is currently open
     }
 
     async userLeftRoom(userId: UserId, roomId: RoomId) {
-        this.#logger.logDebug("userLeft", userId, roomId);
-        // no op
+        this.#logger.logDebug("userLeftRoom", userId, roomId);
+        // no op - see above
     }
 
     async userOpenedRoom(userId: UserId, roomId: RoomId) {
-        // roomId is unused: this app supports only one room open at a time
-        this.#manager.ensureRoomOpen();
+        this.#logger.logDebug("userOpenedroom", userId, roomId);
+
+        const myRoomId = this.#manager.getRoomId();
+        assert(roomId === myRoomId, "roomId === myRoomId");
+
         currentRoomConnectedUsersStore.update(arr => [...assertNotNullish(arr), { id: userId, username: getUserById(userId).username }]);
     }
 
 	async userClosedRoom(userId: UserId, roomId: RoomId) {
-        // roomId is unused: this app supports only one room open at a time
+        this.#logger.logDebug("userClosedRoom", userId, roomId);
+
+        const myRoomId = this.#manager.getRoomId();
+        assert(roomId === myRoomId, "roomId === myRoomId");
+
         this.#manager.ensureRoomOpen();
         currentRoomConnectedUsersStore.update(arr => assertNotNullish(arr).filter(user => user.id !== userId));
     }
@@ -212,22 +229,21 @@ class ChatHubServer implements IChatHubServer {
 
     #manager: HubManager;
     #logger = createLogger("ChatHubServer");
-    #wrapTimeout = createWrapTimeoutErrorHelper(this.#logger);
 
     constructor(container: HubManager) {
         this.#manager = container;
     }
 
     async #invoke<T>(method: string, ...args: any[]): Promise<T> {
-        const connection = this.#manager.getConnection();
-        const result = await this.#wrapTimeout(connection.invoke(method, ...args)) as T;
+        const connection = this.#manager.getConnectedConnection();
+        const result = await wrapHubError(wrapTimeoutError(connection.invoke(method, ...args))) as T;
         this.#logger.logDebug("invoked", method, args, result);
         return result;
     }
 
     async #send(method: string, ...args: any[]): Promise<void> {
-        const connection = this.#manager.getConnection();
-        await this.#wrapTimeout(connection.send(method, ...args));
+        const connection = this.#manager.getConnectedConnection();
+        await wrapHubError(wrapTimeoutError(connection.send(method, ...args)));
         this.#logger.logDebug("sent", method, args)
     }
 
@@ -250,7 +266,7 @@ class ChatHubServer implements IChatHubServer {
     }
 
     async openRoom(roomId: RoomId): Promise<OpenRoomResponse> {
-        return await this.#invoke("OpenRoom", roomId);
+        return await this.#invoke<OpenRoomResponse>("OpenRoom", roomId);
     }
 
     async closeRoom(roomId: RoomId) {
@@ -258,10 +274,8 @@ class ChatHubServer implements IChatHubServer {
     }
 }
 
-
-// exposes the api for this app usage - not the exact api 
-export class ChatHub {
-
+// exposes the api for this app usage
+class ChatHub {
     #manager: HubManager;
 
     constructor() {
@@ -279,7 +293,13 @@ export class ChatHub {
     }
 
     get connected() {
-        return this.#manager.connection !== undefined;
+        return get(connectedStore);
+    }
+
+    async connectIfNotConnected() {
+        if (this.#manager.connection.state === Sg.HubConnectionState.Disconnected) {
+            await this.connect();
+        }
     }
 
     async connect() {
@@ -291,7 +311,7 @@ export class ChatHub {
     }
 
     async sendMessage(content: string) {
-        await this.#server.sendMessage(this.#manager.getOpenRoomId(), content);
+        await this.#server.sendMessage(this.#manager.getRoomId(), content);
     }
 
     async createRoom(name: string) {
@@ -299,19 +319,35 @@ export class ChatHub {
     }
 
     async joinRoom(roomId: RoomId) {
-        const room = get(availableRoomsStore).find(room => room.id == roomId);
         await this.#server.joinRoom(roomId);
-        roomsStore.update(arr => arr.map(room => room.id !== roomId ? room : { ...room, joined: true }));
+        roomsStore.update(arr => {
+            // move room to be last
+            const roomIndex = arr.findIndex(room => room.id === roomId);
+            const room = arr[roomIndex];
+            arr.splice(roomIndex, 1);
+            room.joined = true;
+            arr.push(room);
+            return arr;
+        });
     }
 
     async leaveRoom(roomId: RoomId) {
         await this.#server.leaveRoom(roomId);
-        roomsStore.update(arr => arr.map(room => room.id !== roomId ? room : { ...room, joined: false }));
+        roomsStore.update(arr => {
+            // move room to be last
+            const roomIndex = arr.findIndex(room => room.id === roomId);
+            const room = arr[roomIndex];
+            arr.splice(roomIndex, 1);
+            room.joined = false;
+            arr.push(room);
+            return arr;
+        });    
     }
 
     async openRoom(roomId: RoomId) {
         const room = await this.#server.openRoom(roomId);
 
+        currentRoomStore.set({ name: getRoomById(roomId).name });
         currentRoomUsersStore.set(room.allUsers);
         currentRoomConnectedUsersStore.set(room.connectedUsers);
 
@@ -324,18 +360,18 @@ export class ChatHub {
 
         currentRoomMessagesStore.set(msgs);
         
-        this.#manager.openRoomId = roomId;
+        this.#manager.roomId = roomId;
     }
 
     async closeRoom() {
-        const roomId = this.#manager.getOpenRoomId();
+        const roomId = this.#manager.getRoomId();
         await this.#server.closeRoom(roomId);
 
         currentRoomUsersStore.set(null);
         currentRoomConnectedUsersStore.set(null);
         currentRoomMessagesStore.set(null);
 
-        this.#manager.openRoomId = undefined;
+        this.#manager.roomId = undefined;
     }
 }
 

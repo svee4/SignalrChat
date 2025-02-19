@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -35,7 +36,7 @@ public sealed class LoginEndpoint : IEndpointHandler
 
 		var claims = (IEnumerable<Claim>)[
 			new Claim(ClaimTypes.Name, user.Username),
-			new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())
+			new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
 		];
 
 		var identity = new ClaimsIdentity(claims, AuthenticationHelpers.AuthenticationScheme);

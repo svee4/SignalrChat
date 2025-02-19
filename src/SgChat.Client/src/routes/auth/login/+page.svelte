@@ -11,7 +11,7 @@
         const success = await login(username);
 
         if (success) {
-            await Hub.connect();
+            Hub.connect();
             await goto("/rooms");
         }
 
@@ -19,8 +19,19 @@
     }
 </script>
 
-<main>
+<div id="page-main">
     <label for="username">Username</label>
     <input type="text" bind:value={username} name="username" id="username" />
     <button onclick={loginClick} disabled={inProgress}>Log in</button>
-</main>
+</div>
+
+<style>
+    #page-main {
+        align-self: center;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        justify-content: center;
+        width: min-content;
+    }
+</style>

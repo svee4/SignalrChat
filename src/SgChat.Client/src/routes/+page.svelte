@@ -2,13 +2,22 @@
     import { isLoggedIn } from "$lib/auth";
 </script>
 
-{#if isLoggedIn() }
+<div id="page-main">
+    {#if isLoggedIn() }
+    
+    <a href="/chat">Chat</a>
+    <a href="/auth/logout">Log out</a>
+    
+    {:else}
+    
+    <a href="/auth/login">Log in</a>
+    
+    {/if}
+</div>
 
-<a href="/chat">Chat</a>
-<a href="/auth/logout">Log out</a>
-
-{:else}
-
-<a href="/auth/login">Log in</a>
-
-{/if}
+<style>
+    #page-main {
+        display: flex;
+        align-items: center;
+    }
+</style>

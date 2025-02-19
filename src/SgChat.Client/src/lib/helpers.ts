@@ -1,3 +1,4 @@
+import { ErrorCode as HubErrorCode, type HubError as HubErrorType } from "$lib/signalr/interop";
 
 export const timeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
@@ -8,6 +9,70 @@ export const timeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> =
         })
     });
 }
+
+export class HubError extends Error {
+    readonly code: HubErrorCode;
+    readonly errorMessage: string | null;
+
+    constructor(code: HubErrorCode, errorMessage: string | null, cause: unknown = undefined) {
+        if (isNullish(errorMessage)) {
+            super(code);
+        } else {
+            super(`${code} - ${errorMessage}`);
+        }
+
+        this.code = code;
+        this.errorMessage = errorMessage;
+
+        if (!isNullish(cause)) {
+            this.cause = cause;
+        }
+    }
+}
+
+export const wrapHubError = async <T>(promise: Promise<T>): Promise<T> => {
+    try {
+        return await promise;
+    } catch (err: any) {
+        if (err instanceof Error) {
+            const StartHubError = "STARTHUBERROR:"
+            const EndHubError = ":ENDHUBERROR";
+
+            const message = err.message;
+
+            const start = message.indexOf(StartHubError);
+            const end = message.indexOf(EndHubError);
+
+            if (start > -1) {
+                assert(end > -1, "end > -1");
+
+                // we have a hub error!! woohooo!!
+                // see server Interop.cs for notes on why we use this awful string parsing method
+                const substring = message.substring(start + StartHubError.length, end);
+                const json = JSON.parse(substring) as HubErrorType;
+
+                assert(typeof json.code === "string", 'typeof json.code === "string"');
+                assert(Object.values(HubErrorCode).includes(json.code), "Object.values(HubErrorCode).includes(json.code)");
+                
+                assert(json.errorMessage === null || typeof json.errorMessage === "string", 
+                    'json.message === null || typeof json.message === "string"');
+
+                throw new HubError(json.code, json.errorMessage);
+            }
+        }
+
+        throw err;
+    }
+}
+
+function getAllPropertyNames(obj: any) {
+    var result: any[] = [];
+    while (obj && obj !== Object.prototype) {
+      result.push.apply(result, Object.getOwnPropertyNames(obj));
+      obj = Object.getPrototypeOf(obj);
+    }
+    return result;
+  }
 
 export const assert = (condition: boolean, message: string) => {
     if (!condition) {

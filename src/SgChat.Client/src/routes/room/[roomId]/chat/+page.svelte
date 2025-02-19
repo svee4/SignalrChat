@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { timeout, TimeoutError } from "$lib/helpers";
     import { Hub, CurrentRoomConnectedUsers, CurrentRoomMessages } from "$lib/signalr/chatHub";
-	import type { PageData, PageLoad, PageProps } from "./$types";
+	import { onMount } from "svelte";
+	import type { PageProps } from "./$types";
 
     const { data }: PageProps = $props();
     const roomId = data.roomId;
@@ -9,10 +10,7 @@
     let message = $state("");
     let sending = $state(false);
 
-    const onBeforeUnload = () => {
-        Hub.disconnect();
-        return false;
-    }
+    onMount(async () => await Hub.connectIfNotConnected());
 
     const sendMessage = async () => {
         if (sending) {
@@ -36,9 +34,7 @@
     }
 </script>
 
-<svelte:window onbeforeunload={onBeforeUnload}></svelte:window>
-
-<main>
+<div>
     <a href="/rooms">Close</a>
 
     <div>
@@ -64,4 +60,4 @@
         <input type="text" disabled={sending} bind:value={message} />
         <button onclick={sendMessage} disabled={sending}>Send</button>
     </div>
-</main>
+</div>

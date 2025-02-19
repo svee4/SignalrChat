@@ -52,3 +52,16 @@ export type OpenRoomResponse = {
     readonly connectedUsers: ChatHubUser[], 
     readonly messages: ChatHubMessage[] 
 };
+
+export type HubError = {
+    code: ErrorCode;
+    errorMessage: string | null;
+}
+
+export enum ErrorCode {
+    InvalidArgumentError = "InvalidArgumentError",
+    RoomAlreadyExistsError = "RoomAlreadyExistsError",
+    RoomNotFoundError = "RoomNotFoundError",
+    UserHasNotJoinedRoomError = "UserHasNotJoinedRoomError"
+}
+

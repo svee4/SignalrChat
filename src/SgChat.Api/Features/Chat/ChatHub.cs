@@ -58,10 +58,14 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 	public async Task CreateRoom(string name)
 	{
 		if (string.IsNullOrEmpty(name))
-			throw new HubException(null, new ArgumentNullException(nameof(name)));
+		{
+			throw HubError(new InvalidArgumentError(nameof(name)));
+		}
 
 		if (await _dbContext.Rooms.AnyAsync(room => room.Name == name))
-			throw new HubException(null, new InvalidOperationException("Room name taken"));
+		{
+			throw HubError(new RoomAlreadyExistsError(name));
+		}
 
 		var room = Room.Create(name);
 		_ = _dbContext.Rooms.Add(room);
@@ -75,7 +79,9 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 		var room = await _dbContext.Rooms.FirstOrDefaultAsync(room => room.Id == roomId);
 
 		if (room is null)
-			throw new HubException(null, new InvalidOperationException("No such room"));
+		{
+			throw HubError(new RoomNotFoundError(roomId));
+		}
 
 		var userId = GetCurrentUserId();
 		var user = await _dbContext.Users.Include(user => user.Rooms).SingleAsync(u => u.Id == userId);
@@ -89,7 +95,9 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 		var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.Id == roomId);
 
 		if (room is null)
-			throw new HubException(null, new InvalidOperationException("No such room"));
+		{
+			throw HubError(new RoomNotFoundError(roomId));
+		}
 
 		var userId = GetCurrentUserId();
 		var user = await _dbContext.Users.Include(user => user.Rooms).SingleAsync(u => u.Id == userId);
@@ -125,10 +133,14 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 			.FirstOrDefaultAsync();
 
 		if (room is null)
-			throw new HubException(null, new InvalidOperationException("No such room"));
+		{
+			throw HubError(new RoomNotFoundError(roomId));
+		}
 
 		if (!user.Rooms.Contains(room.Id))
-			throw new HubException(null, new InvalidOperationException("User has not joined this room"));
+		{
+			throw HubError(new UserHasNotJoinedRoomError(roomId));
+		}
 
 		ChatHubUser[] connectedUsers;
 		if (ConnectedRoomUsers.TryGetValue(room.Id, out var users))
@@ -175,14 +187,18 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 	public async Task SendMessage(RoomId roomId, string content)
 	{
 		if (string.IsNullOrEmpty(content))
-			throw new HubException(null, new ArgumentNullException(nameof(content)));
+		{
+			throw HubError(new InvalidArgumentError(nameof(content)));
+		}
 
 		var userId = GetCurrentUserId();
 		var user = await _dbContext.Users.SingleAsync(u => u.Id == userId);
 		var room = await _dbContext.Rooms.FirstOrDefaultAsync(r => r.Id == roomId);
 
 		if (room is null)
-			throw new HubException(null, new InvalidOperationException("No such room"));
+		{
+			throw HubError(new RoomNotFoundError(roomId));
+		}
 
 		var dbMessage = Message.Create(content, user, room);
 		_ = _dbContext.Messages.Add(dbMessage);
@@ -199,13 +215,18 @@ public sealed class ChatHub(SgChatDbContext dbContext) : Hub<IChatHubClient>, IC
 	private UserId GetCurrentUserId()
 	{
 		if (Context.User is null)
+		{
 			throw new InvalidOperationException("Missing user");
+		}
 
 		var userId = Context.User.FindFirstValue(ClaimTypes.NameIdentifier)
 			?? throw new InvalidOperationException("Missing NameIdentifier claim");
 
 		return UserId.From(Guid.Parse(userId));
 	}
+
+	private static HubException HubError(HubError error, Exception? exception = null) =>
+		new HubException(error.Serialize(), exception);
 
 	private static string GetRoomGroupName(RoomId roomId) => $"Room-{roomId}";
 }

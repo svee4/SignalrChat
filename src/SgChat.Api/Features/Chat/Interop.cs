@@ -1,4 +1,5 @@
 using SgChat.Api.Infra.Models;
+using System.Text.Json;
 
 namespace SgChat.Api.Features.Chat;
 
@@ -39,3 +40,23 @@ public interface IChatHubServer
 
 public sealed record CreateRoomResponse(RoomId RoomId);
 public sealed record OpenRoomResponse(ChatHubUser[] AllUsers, ChatHubUser[] ConnectedUsers, ChatHubMessage[] Messages);
+
+public abstract record HubError(string Code, string? ErrorMessage)
+{
+	// there is no way to pass structured data in the error
+	// thus we have to do this bastardized way to ease parsing on client side
+	public virtual string Serialize() =>
+		$"STARTHUBERROR:{JsonSerializer.Serialize(this, options: JsonSerializerOptions.Web)}:ENDHUBERROR";
+}
+
+public sealed record InvalidArgumentError(string Parameter)
+	: HubError(nameof(InvalidArgumentError), $"Parameter {Parameter} was invalid");
+
+public sealed record RoomAlreadyExistsError(string RoomName)
+	: HubError(nameof(RoomAlreadyExistsError), $"Room {RoomName} already exists");
+
+public sealed record RoomNotFoundError(RoomId RoomId)
+	: HubError(nameof(RoomNotFoundError), $"Room {RoomId} not found");
+
+public sealed record UserHasNotJoinedRoomError(RoomId RoomId)
+	: HubError(nameof(UserHasNotJoinedRoomError), $"User has not joined room {RoomId}");
